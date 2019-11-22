@@ -3,7 +3,7 @@ from datetime import datetime
 import sys
 import requests
 
-def transform_log(LogFilePath):
+def transform_log(LogFilePath, search=None):
     """
     transform a log in KT LOGGER format to a json format based on events ordered ascending
     LogFilePath : full path of the Log file to be parsed
@@ -11,7 +11,7 @@ def transform_log(LogFilePath):
     data = open(LogFilePath,'r').readlines()
     start_ = datetime.now()
     transform_stats={'exceptions':[],'start':None,'end':None, 'time_taken':None}
-    tree={'information':[],'trace':[],'warning':[],'error':[],'all':[],}
+    tree={'information':[],'trace':[],'warning':[],'error':[],'all':[],'results':[]}
     for lines in data:
         try:
             if(lines.split('\t')[0] in ['<information>','<error>','<trace>','<warning>']):
@@ -22,21 +22,27 @@ def transform_log(LogFilePath):
                 tree['all'].append(lines)
         except:
             transform_stats['exceptions'].append(str(sys.exc_info()))
+    if(search is not None):
+        for items in tree['all']:
+            if(search in items):
+                tree['results'].append(items)
+
     end_ = datetime.now()
     transform_stats['start']=str(start_)
     transform_stats['end']=str(end_)
     transform_stats['time_taken']=str((end_-start_).total_seconds())
     return {"stats":transform_stats, "data":tree}
 
-def get_last_few_events(LogFilePath , event , count):
+def get_last_few_events(LogFilePath , event , count, search = None):
     """
     Get last few events from the given KT LOG 
     LogFilePath : path of the Logfile to parse
     event : Event to filter
     count: int - last n occurences of the event
     Eg. get_last_few_events("d:\\ge_log.log','error',5)
+    Eg. get_last_few_events("d:\\ge_log.log','results',5)
     """
-    log_json = transform_log(LogFilePath)
+    log_json = transform_log(LogFilePath, search=search)
     if(log_json['stats']['exceptions'].__len__()==0):
         try:
             return log_json['data'][event][-count::]
@@ -44,7 +50,7 @@ def get_last_few_events(LogFilePath , event , count):
             return []
 
 
-def generate_transform_log_link(LogFilePath):
+def generate_transform_log_link(LogFilePath , search = None):
     """
     Generate a link that serves the Log file a json
     LogFilePath Path of the log file to be parsed
@@ -52,13 +58,13 @@ def generate_transform_log_link(LogFilePath):
     WARNING: served data response may be too large for certain programs to handle!
     """
     try:
-        log_json = transform_log(LogFilePath)
+        log_json = transform_log(LogFilePath, search=search)
         rs = requests.post(url = json.load(open('config.json'))['data_host'], json = log_json)
         return rs.content
     except:
         return None
 
-def generate_last_few_events_as_link(LogFilePath , event , count):
+def generate_last_few_events_as_link(LogFilePath , event , count, search = None):
     """
     Generate last few events and server the data using a generated url
     LogFilePath : path of the Logfile to parse
@@ -69,7 +75,7 @@ def generate_last_few_events_as_link(LogFilePath , event , count):
     returns str: link generated
     WARNING: served data response may be too large for certain programs to handle!
     """
-    events = get_last_few_events(LogFilePath , event , count)
+    events = get_last_few_events(LogFilePath , event , count, search=search)
     try:        
         rs = requests.post(url = json.load(open('config.json'))['data_host'], json = events)
         return rs.content
